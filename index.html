@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>탕탕포켓몬</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #222;
+    }
+
+    .center {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #start-button {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 10px 20px;
+      font-size: 24px;
+      background-color: #f44336;
+      color: white;
+      border: none;
+      border-radius: 40px;
+      cursor: pointer;
+    }
+
+    #title {
+      position: fixed;
+      top: 10%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 2.5rem;
+      font-weight: 700;
+      background-color: transparent;
+      color: white;
+      border: none;
+      text-align: center;
+    }
+
+    #img {
+      position: fixed;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+    }
+
+    #restart-button {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 10px 20px;
+      font-size: 24px;
+      background-color: black;
+      color: white;
+      border: none;
+      border-radius: 40px;
+      cursor: pointer;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    canvas {
+      border: 1px solid red;
+      background-image: url('https://cdn.pixabay.com/photo/2016/08/27/11/59/pokemon-1624022_960_720.jpg');
+      background-size: cover;
+      background-position: center;
+    }
+
+    footer {
+      color: white;
+      font-size: 14px;
+      padding: 1px;
+      text-align: center;
+      width: 100%;
+      position: fixed;
+      bottom: 0;
+    }
+
+    .control {
+      display: flex;
+      margin-top: 10px;
+    }
+
+    .arrow {
+      font-size: 30px;
+      height: 50px;
+      width: 100%;
+      background-color: rgba(1, 1, 1, 0.5)
+    }
+
+    @media (min-width: 500px) {
+      .control {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <audio id="bgm" src="https://firebasestorage.googleapis.com/v0/b/runbuild-5d677.appspot.com/o/risk.mp3?alt=media&token=ef5b9807-1541-4c50-94f4-f52c0891a526" autoplay loop></audio>
+
+  <audio id="crash-sound" src="./aak.mp3"></audio>
+  <audio id="ending-sound" src="./ending.mp3"></audio>
+
+  <button id="start-button" class="center">Start Game!!!</button>
+  <h1 id="title" class="center">탕탕!포켓몬</h1>
+  <canvas id="gameCanvas"></canvas>
+  <button id="restart-button" class="hidden center">Restart Game</button>
+  <footer>
+    <h3> © 2023 💪 RunBuilder & ChatGPT </h3>
+    <div class="control">
+      <button class="arrow" data-direction="left" onmousedown="arrowGo('left')" onmouseup="arrowStop('left')">◀</button>
+      <button class="arrow" data-direction="up" onmousedown="arrowGo('up')" onmouseup="arrowStop('up')">🔺</button>
+      <button class="arrow" data-direction="down" onmousedown="arrowGo('down')" onmouseup="arrowStop('down')">🔻</button>
+      <button class="arrow" data-direction="right" onmousedown="arrowGo('right')" onmouseup="arrowStop('right')">▶</button>
+
+    </div>
+  </footer>
+  <script>
+    const backgroundMusic = document.getElementById("bgm");
+    bgm.volume = 0.5; // 배경음악 볼륨 조절 (0.0 ~ 1.0 사이)
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    let lastTouchX = null;
+    document.body.addEventListener("touchmove", (e) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    }, {
+      passive: false
+    });
+    canvas.addEventListener("touchstart", (e) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      const touch = e.touches[0];
+      mouseX = touch.clientX - canvas.getBoundingClientRect().left;
+      mouseY = touch.clientY - canvas.getBoundingClientRect().top;
+    });
+    canvas.addEventListener("touchmove", (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      mouseX = touch.clientX - canvas.getBoundingClientRect().left;
+      mouseY = touch.clientY - canvas.getBoundingClientRect().top;
+    });
+    let player = {
+      x: canvas.width,
+      y: canvas.height,
+      width: 50,
+      height: 50,
+      speed: 5,
+      bullets: [],
+      energy: 10,
+      facing: "up",
+      imgSrc: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png",
+      img: null,
+      score: 0
+    };
+    let obstacles = [];
+    player.img = new Image();
+    player.img.onload = function() {
+      player.width = 100;
+      player.height = 100;
+    };
+    let bulletImage = new Image();
+    bulletImage.src = "https://cdn-icons-png.flaticon.com/512/361/361998.png";
+    let fireTime = 300;
+    let startTime = 0;
+    player.img.src = player.imgSrc;
+
+    function createObstacle() {
+      fetch(
+          "https://pokeapi.co/api/v2/pokemon/" + Math.floor(Math.random() * 898)
+        )
+        .then((response) => response.json())
+        .then((data) => {
+          const width = Math.random() * 70 + 100;
+          const height = Math.random() * 70 + 100;
+          let x,
+            y,
+            speedX,
+            speedY = 0;
+          const direction = Math.floor(Math.random() * 4);
+          switch (direction) {
+            case 0: // Top to bottom
+              x = Math.random() * (canvas.width - width);
+              y = 0;
+              speedX = 0;
+              speedY = 1;
+              // speedY = Math.random() * 3 + 1;
+              break;
+            case 1: // Left to right
+              x = -70;
+              y = Math.random() * (canvas.height - height);
+              speedX = 1;
+              // speedX = Math.random() * 3 + 1;
+              speedY = 0;
+              break;
+            case 2: // Right to left
+              x = canvas.width;
+              y = Math.random() * (canvas.height - height);
+              // speedX = -(Math.random() * 3 + 1);
+              speedX = -1;
+              speedY = 0;
+              break;
+            case 3: // Bottom to top
+              x = Math.random() * (canvas.width - width);
+              y = canvas.height;
+              speedX = 0;
+              speedY = -1;
+              // speedY = -(Math.random() * 3 + 1);
+              break;
+          }
+          obstacles.push({
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            speedX: speedX,
+            speedY: speedY,
+            imgSrc: data.sprites.front_default,
+            img: null,
+          });
+          // console.log(obstacles)
+          if (obstacles.length < 10) {
+            createObstacle();
+          }
+        })
+        .catch((error) =>
+          console.error("Error fetching Pokemon data:", error)
+        );
+      setTimeout(createObstacle, Math.random() * 2000 + 10000);
+    }
+    // let elapsedTime = 0;
+    function startGame() {
+      console.log(canvas.width, canvas.height)
+      player.x = canvas.width / 2
+      player.y = canvas.height / 2
+      bgm.play();
+      player.energy = 10;
+      player.score = 0;
+      player.bullets = [];
+      obstacles = [];
+      startAutoFire();
+      startTime = performance.now();
+      clearInterval(startAutoFire); // 기존에 실행 중이던 startAutoFire를 중지
+      clearTimeout(createObstacle); // 기존에 실행 중이던 createObstacle를 중지
+      document.getElementById("start-button").classList.add("hidden");
+      document.getElementById("restart-button").classList.add("hidden");
+      document.getElementById("title").classList.add("hidden");
+      createObstacle();
+      keys = {
+        ArrowUp: false,
+        ArrowDown: false,
+        ArrowLeft: false,
+        ArrowRight: false,
+      };
+
+      function startAutoFire() {
+        setInterval(() => {
+          let bulletSpeedX = 0;
+          let bulletSpeedY = 0;
+          switch (player.facing) {
+            case "up":
+              bulletSpeedY = -10;
+              break;
+            case "down":
+              bulletSpeedY = 10;
+              break;
+            case "left":
+              bulletSpeedX = -10;
+              break;
+            case "right":
+              bulletSpeedX = 10;
+              break;
+          }
+          player.bullets.push({
+            x: player.x + 30,
+            y: player.y + 30,
+            width: 30,
+            height: 30,
+            speedX: bulletSpeedX,
+            speedY: bulletSpeedY,
+          });
+        }, fireTime);
+      }
+      window.addEventListener("keydown", (e) => {
+        if (e.code in keys) {
+          keys[e.code] = true;
+          player.facing = e.code.replace("Arrow", "").toLowerCase();
+        }
+      });
+      window.addEventListener("keyup", (e) => {
+        if (e.code in keys) {
+          keys[e.code] = false;
+        }
+      });
+      gameLoop();
+    }
+
+    function arrowStop(direction) {
+      if (direction === "left") {
+        keys.ArrowLeft = false
+      } else if (direction === "right") {
+        keys.ArrowRight = false
+      } else if (direction === "up") {
+        keys.ArrowUp = false
+      } else if (direction === "down") {
+        keys.ArrowDown = false
+      }
+    }
+
+    function arrowGo(direction) {
+      if (direction === "left") {
+        player.x -= player.speed;
+        player.facing = "left"
+        keys.ArrowLeft = true
+      } else if (direction === "right") {
+        player.x += player.speed;
+        player.facing = "right"
+        keys.ArrowRight = true
+      } else if (direction === "up") {
+        player.y -= player.speed;
+        player.facing = "up"
+        keys.ArrowUp = true
+      } else if (direction === "down") {
+        player.y += player.speed;
+        player.facing = "down"
+        keys.ArrowDown = true
+      }
+    }
+
+    function restartGame() {
+      document.getElementById("restart-button").classList.add("hidden");;
+      // elapsedTime = 0;    
+      startGame();
+    }
+    document.getElementById("start-button").addEventListener("click", () => {
+      startGame();
+    });
+    document.getElementById("restart-button").addEventListener("click", () => {
+      restartGame();
+    });
+
+    function checkCollision(rect1, rect2) {
+      return (
+        rect1.x < rect2.x + rect2.width - 30 &&
+        rect1.x + rect1.width - 30 > rect2.x &&
+        rect1.y < rect2.y + rect2.height - 30 &&
+        rect1.y + rect1.height - 30 > rect2.y
+      );
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < obstacles.length; i++) {
+        let obstacle = obstacles[i];
+        obstacle.x += obstacle.speedX;
+        obstacle.y += obstacle.speedY;
+        if (!obstacle.img) {
+          obstacle.img = new Image();
+          obstacle.img.onload = function() {
+            obstacle.width = obstacle.img.naturalWidth;
+            obstacle.height = obstacle.img.naturalHeight;
+          };
+          obstacle.img.src = obstacle.imgSrc;
+        }
+        ctx.drawImage(
+          obstacle.img,
+          obstacle.x,
+          obstacle.y,
+          obstacle.width,
+          obstacle.height
+        );
+      }
+      if (keys.ArrowUp && player.y > 0) {
+        player.y -= player.speed;
+      }
+      if (keys.ArrowDown && player.y < canvas.height - player.height) {
+        player.y += player.speed;
+      }
+      if (keys.ArrowLeft && player.x > 0) {
+        player.x -= player.speed;
+      }
+      if (keys.ArrowRight && player.x < canvas.width - player.width) {
+        player.x += player.speed;
+      }
+      ctx.drawImage(
+        player.img,
+        player.x,
+        player.y,
+        player.width,
+        player.height
+      );
+      // ctx.strokeStyle = "red";
+      // ctx.strokeRect(player.x, player.y, player.width, player.height);
+      for (let i = 0; i < player.bullets.length; i++) {
+        let bullet = player.bullets[i];
+        bullet.x += bullet.speedX;
+        bullet.y += bullet.speedY;
+        if (!bullet.img) {
+          bullet.img = bulletImage;
+        }
+        ctx.drawImage(bullet.img, bullet.x, bullet.y, bullet.width, bullet.height);
+        if (
+          bullet.x < -10 ||
+          bullet.x > canvas.width + 10 ||
+          bullet.y < -10 ||
+          bullet.y > canvas.height + 10
+        ) {
+          player.bullets.splice(i, 1);
+          i--;
+        } else {
+          for (let j = 0; j < obstacles.length; j++) {
+            let obstacle = obstacles[j];
+            if (checkCollision(bullet, obstacle)) {
+              player.bullets.splice(i, 1);
+              i--;
+              obstacles.splice(j, 1);
+              // 점수 증가
+              player.score += 1;
+              break;
+            }
+          }
+        }
+      }
+      for (let i = 0; i < obstacles.length; i++) {
+        let obstacle = obstacles[i];
+        if (checkCollision(player, obstacle)) {
+          player.energy--;
+          obstacles.splice(i, 1);
+          i--;
+          // 충돌 시 효과음 재생
+          const crashSound = document.getElementById("crash-sound");
+          crashSound.currentTime = 0;
+          crashSound.play();
+          //충돌시 깜박거림 빨간색
+          ctx.fillStyle = "rgba(255,0,0,0.5)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+      ctx.font = "20px Arial";
+      ctx.fillStyle = "white";
+      ctx.fillText("💖: " + player.energy, 30, 40);
+      ctx.fillText("💎: " + player.score, canvas.width / 2 - 10, 40);
+      // elapsedTime = Math.floor(performance.now() / 1000);
+      elapsedTime = Math.floor((performance.now() - startTime) / 1000);
+      ctx.font = "20px Arial";
+      ctx.fillStyle = "white";
+      ctx.fillText("⏰: " + elapsedTime + "s", canvas.width - 120, 40);
+      if (player.energy <= 0) {
+        // 충돌 시 효과음 재생
+        const endingSound = document.getElementById("ending-sound");
+        endingSound.currentTime = 0;
+        endingSound.play();
+        bgm.pause();
+        document.getElementById("restart-button").classList.remove("hidden");
+      } else {
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", () => {
+      resizeCanvas();
+    });
+    resizeCanvas();
+  </script>
+  </script>
+</body>
+
+</html>
